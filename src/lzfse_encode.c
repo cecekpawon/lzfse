@@ -24,6 +24,34 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include "lzfse.h"
 #include "lzfse_internal.h"
 
+//#include <stdio.h>
+
+uint32_t local_adler32(u_int8_t * buffer, int32_t length)
+{
+  int32_t cnt;
+  uint32_t  result, lowHalf, highHalf;
+
+  lowHalf = 1;
+  highHalf = 0;
+
+  for (cnt = 0; cnt < length; cnt++) {
+    if ((cnt % 5000) == 0) {
+      lowHalf  %= 65521L;
+      highHalf %= 65521L;
+    }
+
+    lowHalf += buffer[cnt];
+    highHalf += lowHalf;
+  }
+
+  lowHalf  %= 65521L;
+  highHalf %= 65521L;
+
+  result = (highHalf << 16) | lowHalf;
+
+  return result;
+}
+
 size_t lzfse_encode_scratch_size() {
   size_t s1 = sizeof(lzfse_encoder_state);
   size_t s2 = lzvn_encode_scratch_size();
@@ -40,8 +68,44 @@ size_t lzfse_encode_buffer_with_scratch(uint8_t *__restrict dst_buffer,
   if (src_size < LZVN_ENCODE_MIN_SRC_SIZE)
     goto try_uncompressed;
 
+  // Assumed prelinked
+  if (*(uint32_t *)src_buffer == MH_MAGIC_64) {
+    // need header
+    size_t extra_size = sizeof(prelinked_header_tpl);
+    if (dst_size <= extra_size)
+      goto try_uncompressed; // DST is really too small, give up
+
+    size_t sz = lzvn_encode_buffer(
+        dst_buffer + extra_size,
+        dst_size - extra_size, src_buffer, src_size, scratch_buffer);
+    if (sz == 0 || sz >= src_size)
+      goto try_uncompressed; // failed, or no compression, fall back to
+                             // uncompressed block
+
+    // If we could encode, setup header and end-of-stream marker (we left room
+    // for them, no need to test)
+    memcpy(dst_buffer, &prelinked_header_tpl, extra_size);
+
+    u_int32_t index = sizeof (struct fat_header);
+    struct fat_arch *f_arch = (struct fat_arch *)&dst_buffer[index];
+
+    // arch offset
+    index += sizeof (struct fat_arch);
+    f_arch->size = LzvnOSSwapInt32((extra_size + sz) - index);
+
+    prelinked_kernel_header *p_header = (prelinked_kernel_header *)&dst_buffer[index];
+    // adler32
+    p_header->adler32 = LzvnOSSwapInt32(local_adler32((uint8_t *)src_buffer, src_size));
+    // uncompressed size
+    p_header->uncompressed_size = LzvnOSSwapInt32(src_size);
+    // compressed size
+    p_header->compressed_size = LzvnOSSwapInt32(sz);
+
+    return sz + extra_size;
+  }
+
   // If input is too small, try encoding with LZVN
-  if (src_size < LZFSE_ENCODE_LZVN_THRESHOLD) {
+  else if (src_size < LZFSE_ENCODE_LZVN_THRESHOLD) {
     // need header + end-of-stream marker
     size_t extra_size = 4 + sizeof(lzvn_compressed_block_header);
     if (dst_size <= extra_size)

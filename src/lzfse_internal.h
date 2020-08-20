@@ -613,4 +613,70 @@ static const int32_t d_base_value[LZFSE_ENCODE_D_SYMBOLS] = {
   131068, 163836, 196604, 229372
 };
 
+
+//
+// Prelinked support
+// https://github.com/Piker-Alpha/LZVN
+//
+
+
+#define LzvnOSSwapInt32(x) \
+    ((uint32_t)((((uint32_t)(x) & 0xff000000) >> 24) | \
+          (((uint32_t)(x) & 0x00ff0000) >>  8) | \
+          (((uint32_t)(x) & 0x0000ff00) <<  8) | \
+          (((uint32_t)(x) & 0x000000ff) << 24)))
+
+#define PLATFORM_NAME_LEN  (64)
+#define ROOT_PATH_LEN     (256)
+
+typedef struct
+{
+  uint32_t  signature;
+  uint32_t  compress_type;
+  uint32_t  adler32;
+  uint32_t  uncompressed_size;
+  uint32_t  compressed_size;
+  uint32_t  prelink_version;         // value >= 1 means KASLR supported
+  uint32_t  reserved[10];
+  char      platform_name[PLATFORM_NAME_LEN];  // unused
+  char      root_path[ROOT_PATH_LEN];      // unused
+  char      data[0];
+} prelinked_kernel_header;
+
+static const uint32_t prelinked_header_tpl[ 103 ] =
+{
+  0xBEBAFECA, 0x01000000, 0x07000001, 0x03000000, 0x1C000000, 0xFFFFFFFF, 0x00000000, 0x706D6F63,
+  0x6E767A6C, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x01000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+  0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000
+};
+
+#define MH_MAGIC_64 0xfeedfacf /* the 64-bit mach magic number */
+#define MH_CIGAM_64 0xcffaedfe /* NXSwapInt(MH_MAGIC_64) */
+
+#define FAT_MAGIC 0xcafebabe
+#define FAT_CIGAM 0xbebafeca  /* NXSwapLong(FAT_MAGIC) */
+
+struct fat_header {
+  uint32_t  magic;    /* FAT_MAGIC */
+  uint32_t  nfat_arch;  /* number of structs that follow */
+};
+
+struct fat_arch {
+  int       cputype;  /* cpu specifier (int) */
+  int       cpusubtype; /* machine specifier (int) */
+  uint32_t  offset;   /* file offset to this object file */
+  uint32_t  size;   /* size of this object file */
+  uint32_t  align;    /* alignment as a power of 2 */
+};
+
 #endif // LZFSE_INTERNAL_H

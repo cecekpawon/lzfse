@@ -24,6 +24,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include "lzfse.h"
 #include "lzfse_internal.h"
 
+//#include <stdio.h>
+
 size_t lzfse_decode_scratch_size() { return sizeof(lzfse_decoder_state); }
 
 size_t lzfse_decode_buffer_with_scratch(uint8_t *__restrict dst_buffer, 
@@ -39,6 +41,48 @@ size_t lzfse_decode_buffer_with_scratch(uint8_t *__restrict dst_buffer,
   s->dst = dst_buffer;
   s->dst_begin = dst_buffer;
   s->dst_end = dst_buffer + dst_size;
+
+  // Assumed prelinked
+  if (*(uint32_t *)s->src == FAT_CIGAM) {
+    struct fat_arch *f_arch = (struct fat_arch *)(unsigned char *)(s->src + sizeof (struct fat_header));
+    prelinked_kernel_header *p_header = (prelinked_kernel_header *)(unsigned char *)(s->src + LzvnOSSwapInt32(f_arch->offset));
+
+    if ((p_header->signature == LzvnOSSwapInt32('comp'))
+      && (p_header->compress_type == LzvnOSSwapInt32('lzvn'))
+      )
+    {
+      lzvn_compressed_block_header *st;
+      //uint32_t signature = LzvnOSSwapInt32(p_header->compress_type);
+      //uint32_t compress_type = LzvnOSSwapInt32(p_header->compress_type);
+      //uint32_t adler32 = LzvnOSSwapInt32(p_header->adler32);
+      uint32_t uncompressed_size = LzvnOSSwapInt32(p_header->uncompressed_size);
+      uint32_t compressed_size = LzvnOSSwapInt32(p_header->compressed_size);
+      uint32_t index;
+
+      //printf ("signature......: 0x%08x\n", signature);
+      //printf ("compress_type......: 0x%08x\n", compress_type);
+      //printf ("adler32......: 0x%08x\n", adler32);
+      //printf ("uncompressed_size......: 0x%08x\n", uncompressed_size);
+      //printf ("compressed_size......: 0x%08x\n", compressed_size);
+
+      // Create fake acceptable header with 'bvxn' magic for lzfse-lzvn
+
+      st = (lzvn_compressed_block_header *)(s->src);
+      st->magic = LZFSE_COMPRESSEDLZVN_BLOCK_MAGIC;
+      st->n_raw_bytes = uncompressed_size;
+      st->n_payload_bytes = compressed_size;
+      index = sizeof(lzvn_compressed_block_header);
+      memcpy((uint8_t *)&s->src[index], &s->src[sizeof(prelinked_header_tpl)], compressed_size);
+      index += compressed_size;
+      memset((uint8_t *)&s->src[index], 0x00, src_size - index);
+      store4((uint8_t *)&s->src[index], LZFSE_ENDOFSTREAM_BLOCK_MAGIC);
+      //src_size = compressed_size; // do not touch
+      dst_size = uncompressed_size;
+      s->src_end = s->src + src_size;
+      s->dst_end = dst_buffer + dst_size;
+    }
+  }
+
 
   // Decode
   int status = lzfse_decode(s);
