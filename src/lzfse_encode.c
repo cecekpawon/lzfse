@@ -26,7 +26,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 //#include <stdio.h>
 
-uint32_t local_adler32(u_int8_t * buffer, int32_t length)
+uint32_t local_adler32(uint8_t * buffer, int32_t length)
 {
   int32_t cnt;
   uint32_t  result, lowHalf, highHalf;
@@ -86,7 +86,7 @@ size_t lzfse_encode_buffer_with_scratch(uint8_t *__restrict dst_buffer,
     // for them, no need to test)
     memcpy(dst_buffer, &prelinked_header_tpl, extra_size);
 
-    u_int32_t index = sizeof (struct fat_header);
+    uint32_t index = sizeof (struct fat_header);
     struct fat_arch *f_arch = (struct fat_arch *)&dst_buffer[index];
 
     // arch offset

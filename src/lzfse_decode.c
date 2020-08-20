@@ -47,8 +47,8 @@ size_t lzfse_decode_buffer_with_scratch(uint8_t *__restrict dst_buffer,
     struct fat_arch *f_arch = (struct fat_arch *)(unsigned char *)(s->src + sizeof (struct fat_header));
     prelinked_kernel_header *p_header = (prelinked_kernel_header *)(unsigned char *)(s->src + LzvnOSSwapInt32(f_arch->offset));
 
-    if ((p_header->signature == LzvnOSSwapInt32('comp'))
-      && (p_header->compress_type == LzvnOSSwapInt32('lzvn'))
+    if ((p_header->signature == COMP_SIGN)
+      && (p_header->compress_type == LZVN_MAGIC)
       )
     {
       lzvn_compressed_block_header *st;
