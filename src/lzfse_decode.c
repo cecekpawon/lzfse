@@ -42,45 +42,50 @@ size_t lzfse_decode_buffer_with_scratch(uint8_t *__restrict dst_buffer,
   s->dst_begin = dst_buffer;
   s->dst_end = dst_buffer + dst_size;
 
+  uint32_t  offset = 0;
+
   // Assumed prelinked
   if (*(uint32_t *)s->src == FAT_CIGAM) {
     struct fat_arch *f_arch = (struct fat_arch *)(unsigned char *)(s->src + sizeof (struct fat_header));
-    prelinked_kernel_header *p_header = (prelinked_kernel_header *)(unsigned char *)(s->src + LzvnOSSwapInt32(f_arch->offset));
+    offset += LzvnOSSwapInt32(f_arch->offset);
+  }
 
-    if ((p_header->signature == COMP_SIGN)
-      && (p_header->compress_type == LZVN_MAGIC)
-      )
-    {
-      lzvn_compressed_block_header *st;
-      //uint32_t signature = LzvnOSSwapInt32(p_header->compress_type);
-      //uint32_t compress_type = LzvnOSSwapInt32(p_header->compress_type);
-      //uint32_t adler32 = LzvnOSSwapInt32(p_header->adler32);
-      uint32_t uncompressed_size = LzvnOSSwapInt32(p_header->uncompressed_size);
-      uint32_t compressed_size = LzvnOSSwapInt32(p_header->compressed_size);
-      uint32_t index;
+  prelinked_kernel_header *p_header = (prelinked_kernel_header *)(unsigned char *)(s->src + offset);
 
-      //printf ("signature......: 0x%08x\n", signature);
-      //printf ("compress_type......: 0x%08x\n", compress_type);
-      //printf ("adler32......: 0x%08x\n", adler32);
-      //printf ("uncompressed_size......: 0x%08x\n", uncompressed_size);
-      //printf ("compressed_size......: 0x%08x\n", compressed_size);
+  if ((p_header->signature == COMP_SIGN)
+    && (p_header->compress_type == LZVN_MAGIC)
+    )
+  {
+    lzvn_compressed_block_header *st;
+    //uint32_t signature = LzvnOSSwapInt32(p_header->signature);
+    //uint32_t compress_type = LzvnOSSwapInt32(p_header->compress_type);
+    //uint32_t adler32 = LzvnOSSwapInt32(p_header->adler32);
+    uint32_t uncompressed_size = LzvnOSSwapInt32(p_header->uncompressed_size);
+    uint32_t compressed_size = LzvnOSSwapInt32(p_header->compressed_size);
+    uint32_t index;
 
-      // Create fake acceptable header with 'bvxn' magic for lzfse-lzvn
+    //printf ("signature......: 0x%08x\n", signature);
+    //printf ("compress_type......: 0x%08x\n", compress_type);
+    //printf ("adler32......: 0x%08x\n", adler32);
+    //printf ("uncompressed_size......: 0x%08x\n", uncompressed_size);
+    //printf ("compressed_size......: 0x%08x\n", compressed_size);
 
-      st = (lzvn_compressed_block_header *)(s->src);
-      st->magic = LZFSE_COMPRESSEDLZVN_BLOCK_MAGIC;
-      st->n_raw_bytes = uncompressed_size;
-      st->n_payload_bytes = compressed_size;
-      index = sizeof(lzvn_compressed_block_header);
-      memcpy((uint8_t *)&s->src[index], &s->src[sizeof(prelinked_header_tpl)], compressed_size);
-      index += compressed_size;
-      memset((uint8_t *)&s->src[index], 0x00, src_size - index);
-      store4((uint8_t *)&s->src[index], LZFSE_ENDOFSTREAM_BLOCK_MAGIC);
-      //src_size = compressed_size; // do not touch
-      dst_size = uncompressed_size;
-      s->src_end = s->src + src_size;
-      s->dst_end = dst_buffer + dst_size;
-    }
+    // Create fake acceptable header with 'bvxn' magic for lzfse-lzvn
+
+    st = (lzvn_compressed_block_header *)(s->src);
+    st->magic = LZFSE_COMPRESSEDLZVN_BLOCK_MAGIC;
+    st->n_raw_bytes = uncompressed_size;
+    st->n_payload_bytes = compressed_size;
+    index = sizeof(lzvn_compressed_block_header);
+    offset = (offset == 0) ? (sizeof(struct fat_header) + sizeof(struct fat_arch)) : 0;
+    memcpy((uint8_t *)&s->src[index], &s->src[sizeof(prelinked_header_tpl) - offset], compressed_size);
+    index += compressed_size;
+    memset((uint8_t *)&s->src[index], 0x00, src_size - index);
+    store4((uint8_t *)&s->src[index], LZFSE_ENDOFSTREAM_BLOCK_MAGIC);
+    //src_size = compressed_size; // do not touch
+    dst_size = uncompressed_size;
+    s->src_end = s->src + src_size;
+    s->dst_end = dst_buffer + dst_size;
   }
 
 
